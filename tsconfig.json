@@ -15,7 +15,10 @@
     "stripInternal": true,
     "strictNullChecks": true,
     "downlevelIteration": true,
-    "lib": ["es6", "DOM"],
+    "lib": [
+      "es6",
+      "DOM"
+    ],
     "moduleResolution": "node",
     "outDir": "dist",
     "target": "es6",
@@ -23,12 +26,26 @@
     "removeComments": true,
     "incremental": true,
     "skipLibCheck": true, // Fix conflict with node types: https://github.com/DefinitelyTyped/DefinitelyTyped/issues/16825
-    "plugins": [{ "name": "typescript-tslint-plugin" }],
-    "types": ["node", "jest"],
+    "plugins": [
+      {
+        "name": "typescript-tslint-plugin"
+      }
+    ],
+    "types": [
+      "node",
+      "jest"
+    ],
     "paths": {
-      "*": ["src/typings/*"]
+      "*": [
+        "src/typings/*"
+      ]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/**/*.test.ts"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/**/*.test.ts"
+  ]
 }
