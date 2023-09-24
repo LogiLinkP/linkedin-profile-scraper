@@ -155,7 +155,7 @@ async function autoScroll(page: Page) {
 
         if (totalHeight >= scrollHeight) {
           clearInterval(timer);
-          resolve();
+          resolve(true);
         }
       }, 100);
     });
@@ -180,11 +180,11 @@ export class LinkedInProfileScraper {
     if (!userDefinedOptions.sessionCookieValue) {
       throw new Error(`${errorPrefix} Option "sessionCookieValue" is required.`);
     }
-    
+
     if (userDefinedOptions.sessionCookieValue && typeof userDefinedOptions.sessionCookieValue !== 'string') {
       throw new Error(`${errorPrefix} Option "sessionCookieValue" needs to be a string.`);
     }
-    
+
     if (userDefinedOptions.userAgent && typeof userDefinedOptions.userAgent !== 'string') {
       throw new Error(`${errorPrefix} Option "userAgent" needs to be a string.`);
     }
@@ -192,11 +192,11 @@ export class LinkedInProfileScraper {
     if (userDefinedOptions.keepAlive !== undefined && typeof userDefinedOptions.keepAlive !== 'boolean') {
       throw new Error(`${errorPrefix} Option "keepAlive" needs to be a boolean.`);
     }
-   
+
     if (userDefinedOptions.timeout !== undefined && typeof userDefinedOptions.timeout !== 'number') {
       throw new Error(`${errorPrefix} Option "timeout" needs to be a number.`);
     }
-    
+
     if (userDefinedOptions.headless !== undefined && typeof userDefinedOptions.headless !== 'boolean') {
       throw new Error(`${errorPrefix} Option "headless" needs to be a boolean.`);
     }
@@ -521,7 +521,7 @@ export class LinkedInProfileScraper {
       await page.goto(profileUrl, {
         // Use "networkidl2" here and not "domcontentloaded". 
         // As with "domcontentloaded" some elements might not be loaded correctly, resulting in missing data.
-        waitUntil: 'networkidle2',
+        waitUntil: 'domcontentloaded',
         timeout: this.options.timeout
       });
 
@@ -555,7 +555,7 @@ export class LinkedInProfileScraper {
           statusLog(logSection, `Could not find or click expand button selector "${buttonSelector}". So we skip that one.`, scraperSessionId)
         }
       }
-      
+
 
       // To give a little room to let data appear. Setting this to 0 might result in "Node is detached from document" errors
       await page.waitFor(100);
@@ -580,30 +580,30 @@ export class LinkedInProfileScraper {
       statusLog(logSection, 'Parsing profile data...', scraperSessionId)
 
       const rawUserProfileData: RawProfile = await page.evaluate(() => {
-        const profileSection = document.querySelector('.pv-top-card')
+        const profileSection = document.querySelector('#profile-content')
 
         const url = window.location.href
 
-        const fullNameElement = profileSection?.querySelector('.pv-top-card--list li:first-child')
+        const fullNameElement = profileSection?.querySelector('.pv-text-details__left-panel h1')
         const fullName = fullNameElement?.textContent || null
 
-        const titleElement = profileSection?.querySelector('h2')
+        const titleElement = profileSection?.querySelector('section div.pv-text-details__left-panel div.text-body-medium.break-words')
         const title = titleElement?.textContent || null
 
-        const locationElement = profileSection?.querySelector('.pv-top-card--list.pv-top-card--list-bullet.mt1 li:first-child')
+        const locationElement = profileSection?.querySelector('.pv-text-details__left-panel>span.text-body-small')
         const location = locationElement?.textContent || null
 
-        const photoElement = profileSection?.querySelector('.pv-top-card__photo') || profileSection?.querySelector('.profile-photo-edit__preview')
-        const photo = photoElement?.getAttribute('src') || null
+        // const photoElement = profileSection?.querySelector('.pv-top-card__photo>img.pv-top-card-profile-picture__image')// || profileSection?.querySelector('.profile-photo-edit__preview')
+        // const photo = (photoElement as HTMLImageElement).currentSrc || null
 
-        const descriptionElement = document.querySelector('.pv-about__summary-text .lt-line-clamp__raw-line') // Is outside "profileSection"
+        const descriptionElement = profileSection?.querySelector('#about ~ div:nth-child(3)') // Is outside "profileSection"
         const description = descriptionElement?.textContent || null
 
         return {
           fullName,
           title,
           location,
-          photo,
+          // photo,
           description,
           url
         } as RawProfile
@@ -623,36 +623,63 @@ export class LinkedInProfileScraper {
 
       statusLog(logSection, `Parsing experiences data...`, scraperSessionId)
 
-      const rawExperiencesData: RawExperience[] = await page.$$eval('#experience-section ul > .ember-view', (nodes) => {
+      const rawExperiencesData: RawExperience[] = await page.$$eval('#experience ~ div:nth-child(3) > ul > li', (nodes) => {
         let data: RawExperience[] = []
 
         // Using a for loop so we can use await inside of it
         for (const node of nodes) {
-          const titleElement = node.querySelector('h3');
+          const check_evolucion = node.querySelector(".pvs-entity__path-node");
+          let titleElement;
+          let dateRangeElement;
+          let employmentType;
+          let company;
+          let location;
+          if (check_evolucion) {
+            const elementos = node.querySelectorAll(".pvs-entity.pvs-entity--with-path span:first-child");
+            titleElement = elementos[0];
+            dateRangeElement = elementos[2];
+            const employmentTypeElement = elementos[1];
+            employmentType = employmentTypeElement?.textContent
+
+            const companyElement = node.querySelector("span:first-child");
+            company = companyElement?.textContent;
+
+            const locationElement = node.querySelector("div:nth-child(2)>div:first-child span:nth-child(3)>span:first-child");
+            location = locationElement?.textContent?.split("·")[0].trim() || null;
+
+          } else {
+            titleElement = node.querySelector('div.display-flex.align-items-center.mr1.t-bold>span:first-child');
+
+            const elementos = node.querySelectorAll("span.t-14.t-normal>span:first-child");
+            const employmentTypeElement = elementos[0];
+            // const companyElement = elementos[1];
+            // const descriptionElement = elementos[2];
+
+            // const employmentTypeElement = node.querySelector('span.pv-entity__secondary-title');
+            employmentType = employmentTypeElement?.textContent?.split("·")[1]?.trim() || null
+
+            // const companyElement = node.querySelector('.pv-entity__secondary-title');
+            // const companyElementClean = companyElement && companyElement?.querySelector('span') ? companyElement?.removeChild(companyElement.querySelector('span') as Node) && companyElement : companyElement || null;
+            company = employmentTypeElement?.textContent?.split("·")[0]?.trim() || null
+
+            // const descriptionElement = node.querySelector('.pv-entity__description');
+            // const description = descriptionElement?.textContent || null
+
+            dateRangeElement = elementos[1]; //node.querySelector('.pv-entity__date-range span:nth-child(2)');
+
+
+            const locationElement = elementos[2]; //node.querySelector('.pv-entity__location span:nth-child(2)');
+            location = locationElement?.textContent?.split("·")[0].trim() || null;
+          }
           const title = titleElement?.textContent || null
-
-          const employmentTypeElement = node.querySelector('span.pv-entity__secondary-title');
-          const employmentType = employmentTypeElement?.textContent || null
-
-          const companyElement = node.querySelector('.pv-entity__secondary-title');
-          const companyElementClean = companyElement && companyElement?.querySelector('span') ? companyElement?.removeChild(companyElement.querySelector('span') as Node) && companyElement : companyElement || null;
-          const company = companyElementClean?.textContent || null
-
-          const descriptionElement = node.querySelector('.pv-entity__description');
-          const description = descriptionElement?.textContent || null
-
-          const dateRangeElement = node.querySelector('.pv-entity__date-range span:nth-child(2)');
           const dateRangeText = dateRangeElement?.textContent || null
 
-          const startDatePart = dateRangeText?.split('–')[0] || null;
+          const startDatePart = dateRangeText?.split('-')[0] || null;
           const startDate = startDatePart?.trim() || null;
 
-          const endDatePart = dateRangeText?.split('–')[1] || null;
+          const endDatePart = dateRangeText?.split('-')[1]?.split("·")[0] || null;
           const endDateIsPresent = endDatePart?.trim().toLowerCase() === 'present' || false;
           const endDate = (endDatePart && !endDateIsPresent) ? endDatePart.trim() : 'Present';
-
-          const locationElement = node.querySelector('.pv-entity__location span:nth-child(2)');
-          const location = locationElement?.textContent || null;
 
           data.push({
             title,
@@ -662,7 +689,7 @@ export class LinkedInProfileScraper {
             startDate,
             endDate,
             endDateIsPresent,
-            description
+            description: null
           })
         }
 
@@ -765,7 +792,7 @@ export class LinkedInProfileScraper {
 
           const titleElement = node.querySelector('.pv-entity__summary-info h3');
           const title = titleElement?.textContent || null;
-          
+
           const companyElement = node.querySelector('.pv-entity__summary-info span.pv-entity__secondary-title');
           const company = companyElement?.textContent || null;
 
